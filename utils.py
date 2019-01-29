@@ -1,7 +1,5 @@
-import logging
-
 # Third party
-from slackclient import SlackClient
+from loguru import logger
 
 # Local
 import settings
@@ -9,23 +7,7 @@ from models import User
 from sql import create_users_table
 
 
-def enable_logging():
-    """
-    Enable info level logging in this format:
-    DATE       TIME           LEVEL  MESSAGE
-    2018-11-13 21:04:43,881 - INFO - Bot connected and running!
-
-    :returns: a python logger object
-    """
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    handler = logging.FileHandler(settings.LOG_LOCATION)
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    return logger
-
-
+@logger.catch
 def get_users_from_slack():
     """
     Syncs our database with Slack. Create any active
@@ -67,7 +49,10 @@ def get_users_from_slack():
         else:
             current_user.delete()
 
+    logger.info(f"Successfully updated users from Slack.")
 
+
+@logger.catch
 def get_slack_users_channels():
     """
     Get all direct channels for users on Slack to be stored in DB,

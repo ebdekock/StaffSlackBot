@@ -7,16 +7,14 @@ from datetime import datetime, timedelta
 
 # Third party
 import schedule
+from loguru import logger
 
 # Local
 import settings as s
 from fields import StringField
 from models import User
 from sql import basic_sql_query, fetch_all_rows_sql, fetch_one_row_sql
-from utils import enable_logging, get_users_from_slack
-
-# Enable logging.
-logger = enable_logging()
+from utils import get_users_from_slack
 
 
 class SlackEvent:
@@ -90,6 +88,7 @@ class MonitorSlack(threading.Thread):
                     direct_message = SlackEvent(event["user"], event["text"])
                     s.SLACK_EVENTS_Q.put(direct_message)
 
+    @logger.catch
     def run(self):
         while True:
             self.queue_slack_events()
@@ -199,6 +198,7 @@ class ProcessQueue(threading.Thread):
                 "chat.postMessage", channel=user.slack_channel, text=default_response
             )
 
+    @logger.catch
     def run(self):
         while True:
             # Blocking, will wait for new events to get added
@@ -272,6 +272,7 @@ class ScheduleThread(threading.Thread):
                     "chat.postMessage", channel=user.slack_channel, text=response
                 )
 
+    @logger.catch
     def run(self):
         # Register the scheduled tasks
         schedule.every(5).seconds.do(self.clear_challenges)

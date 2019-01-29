@@ -1,8 +1,5 @@
-import re
-import sqlite3
 from datetime import datetime
 
-import settings
 from fields import NullDateTimeField, NullEmailField, NullStringField, StringField
 from sql import basic_sql_query, fetch_all_rows_sql, fetch_one_row_sql
 

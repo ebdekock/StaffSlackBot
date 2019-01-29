@@ -1,16 +1,16 @@
 import sys
 
-import settings
+import settings as s
 from classes import MonitorSlack, ProcessQueue, ScheduleThread
 from utils import get_users_from_slack
 
 # Requirements
 assert sys.version_info[0] >= 3, "Require Python 3"
-assert settings.SLACK_BOT_TOKEN, "Missing Secret: SLACK_BOT_TOKEN"
+assert s.SLACK_BOT_TOKEN, "Missing Secret: SLACK_BOT_TOKEN"
 
 if __name__ == "__main__":
     # Connect to Slack
-    settings.slack_init()
+    s.slack_init()
 
     # On initial connect, get all users from Slack
     get_users_from_slack()

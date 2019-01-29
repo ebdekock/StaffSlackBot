@@ -6,6 +6,7 @@ import queue
 from pathlib import Path
 
 # Third Party
+from loguru import logger
 from slackclient import SlackClient
 
 # File locations
@@ -46,6 +47,19 @@ def slack_init():
     global SLACK_CLIENT
     global SLACK_EVENTS_Q
     global STAFF_BOT_ID
+    global LOG_LOCATION
+
+    # Configure loguru
+    # This allows us to add @logger.catch decorator
+    # to any functions to catch unhandled exceptions.
+    logger.add(
+        LOG_LOCATION,  # Log file
+        enqueue=True,  # Enables thread safe logging
+        backtrace=True,  # Enables stack trace logging
+        rotation="100 MB",  # Rotates when log reaches 100MB
+        retention=2,  # Keep two archived logs
+        compression="gz",  # Compress rotated logs
+    )
 
     # Init Queue used for Slack events
     SLACK_EVENTS_Q = queue.Queue()

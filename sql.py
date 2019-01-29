@@ -1,5 +1,6 @@
 import sqlite3
 
+# Local
 import settings
 
 # Sqlite3 does not currently support path objects
@@ -8,9 +9,9 @@ database = str(settings.DATABASE_LOCATION)
 
 def basic_sql_query(sql, data):
     """
-    Basic SQL query that connects, commits and closes off 
-    the connection. It enforces foreign key constraints. 
-    Supports most of the basic queries that doesnt expect 
+    Basic SQL query that connects, commits and closes off
+    the connection. It enforces foreign key constraints.
+    Supports most of the basic queries that doesnt expect
     a response (INSERT, UPDATE, DELETE).
 
     :param sql: query to be executed
@@ -42,6 +43,20 @@ def fetch_one_row_sql(sql, data):
     return row
 
 
+def fetch_all_rows_sql(sql, data=""):
+    """
+    SQL query that retrieves all rows
+    from database with optional data
+    to be substitued into query.
+    """
+    conn = sqlite3.connect(database)
+    cur = conn.cursor()
+    cur.execute(sql, data)
+    rows = cur.fetchall()
+    conn.close()
+    return [row for row in (rows or [])]
+
+
 def create_users_table():
     """
     SQL query that creates user table if it doesnt exist.
@@ -49,6 +64,7 @@ def create_users_table():
     """
     sql = """CREATE TABLE IF NOT EXISTS users (
         slack_id text UNIQUE NOT NULL PRIMARY KEY,
+        slack_channel text UNIQUE,
         email text UNIQUE,
         full_name text,
         pref_name text,
@@ -67,7 +83,9 @@ def create_users_table():
 def create_challenges_table():
     """
     SQL query that creates challenges table if it doesnt exist.
-    This will store challenges for the guessing game.
+    This will store challenges for the guessing game. Foreign key
+    not really necessary, but ensures only users that exist can
+    be issued challenges.
     """
     sql = """CREATE TABLE IF NOT EXISTS challenges (
         slack_id text NOT NULL,

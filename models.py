@@ -1,11 +1,10 @@
+import re
 import sqlite3
-
 from datetime import datetime
 
 import settings
-
 from fields import NullDateTimeField, NullEmailField, NullStringField, StringField
-from sql import basic_sql_query, fetch_one_row_sql
+from sql import basic_sql_query, fetch_all_rows_sql, fetch_one_row_sql
 
 
 class User:
@@ -15,17 +14,20 @@ class User:
     """
 
     # Strict type enforcing on fields
-    slack_id = StringField()
+    slack_id = StringField(upper_case=True)
+    slack_channel = NullStringField(upper_case=True)
     email = NullEmailField()
     full_name = NullStringField()
     pref_name = NullStringField()
     phone = NullStringField()
     photo_url = NullStringField()
-    challenge = NullStringField()
+    challenge = NullStringField(upper_case=True)
+    # UTC time
     challenge_datetime = NullDateTimeField()
 
     all_attributes = (
         "slack_id",
+        "slack_channel",
         "email",
         "full_name",
         "pref_name",
@@ -36,7 +38,8 @@ class User:
     )
 
     def __init__(self, **kwargs):
-        # Initialise remaining fields with None
+        # Initialise remaining fields with None, downside is
+        # that user has to be created with at least one keyword arg
         for attribute in self.all_attributes:
             setattr(self, attribute, kwargs.get(attribute, None))
 
@@ -46,10 +49,27 @@ class User:
     def __setitem__(self, key, value):
         self.__dict__[key] = value
 
+    @property
+    def first_name(self):
+        return self.full_name.split().pop(0).title() if self.full_name else None
+
+    @property
+    def all_names(self):
+        """
+        Return set of names that user could be known as for the guessing
+        game.
+        """
+        names = set()
+        if self.full_name:
+            names.update(self.full_name.split())
+        if self.pref_name:
+            names.update(self.pref_name.split())
+        return names
+
     def _serialise(self):
         """
         Convert user into list of its attributes for saving into
-        database. 
+        database.
 
         :returns: a list attributes
 
@@ -79,15 +99,14 @@ class User:
         """
         Update database fields on User objects, it requires that the user
         already exists in the database.
-
-        :param user: serialised
-
         """
         for attribute in self.all_attributes:
+            user[attribute] = None
             if self[attribute]:
                 user[attribute] = self[attribute]
         # Create list of variables for the update query
         updated_values = user._serialise()
+        # This is required to specify which user is being updated in the query below
         updated_values.append(user.slack_id)
 
         # Allows us to create query without worrying about number of attributes on the user
@@ -142,6 +161,14 @@ class User:
 
         return User._deserialise(user) if user else None
 
+    def get_all_other_users(self):
+        """
+        Retrieve all other users that exist in the database.
+        """
+        sql = f"SELECT slack_id FROM users WHERE slack_id NOT LIKE '{self.slack_id}'"
+        users = fetch_all_rows_sql(sql)
+        return [user[0] for user in users]
+
     @staticmethod
     def parse_slack_data(data):
         """
@@ -166,4 +193,4 @@ class User:
         return user
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(" f"{self.email!r}, {self.full_name!r})"
+        return f"{self.__class__.__name__}({self.slack_id!r}, {self.full_name!r})"

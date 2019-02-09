@@ -9,16 +9,22 @@ from pathlib import Path
 from loguru import logger
 from slackclient import SlackClient
 
+from typing import Any, Optional
+
 # File locations
-LOG_LOCATION = Path.cwd() / "log" / "bot.log"
-DATABASE_LOCATION = Path.cwd() / "data" / "bot.sqlite"
+LOG_LOCATION: Path = Path.cwd() / "log" / "bot.log"
+DATABASE_LOCATION: Path = Path.cwd() / "data" / "bot.sqlite"
 
 # Used to connect to Slack API
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+SLACK_BOT_TOKEN: Optional[str] = os.getenv("SLACK_BOT_TOKEN")
 # Needed for interactive messages
-SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
-# Bot's Slack client, user ID and events queue: assigned after the bot starts up
-SLACK_CLIENT = STAFF_BOT_ID = SLACK_EVENTS_Q = None
+SLACK_SIGNING_SECRET: Optional[str] = os.getenv("SLACK_SIGNING_SECRET")
+# Init Slack events queue
+SLACK_EVENTS_Q: queue.Queue = queue.Queue()
+
+# Bot's Slack client and user ID: assigned after the bot starts up
+SLACK_CLIENT: Any = None
+STAFF_BOT_ID: Optional[str] = None
 
 # Delay in seconds between checking Slack real time session for new events
 SLACK_RTM_READ_DELAY = 0.5
@@ -38,14 +44,13 @@ COMPANY_SLACK_EMAIL = "@"
 PLAY_GAME = "play"
 
 
-def slack_init():
+def slack_init() -> None:
     """
     Initialise Slack connection and configure global vars.
     Should be run once when the bot starts up.
     """
     global SLACK_BOT_TOKEN
     global SLACK_CLIENT
-    global SLACK_EVENTS_Q
     global STAFF_BOT_ID
     global LOG_LOCATION
 
@@ -60,9 +65,6 @@ def slack_init():
         retention=2,  # Keep two archived logs
         compression="gz",  # Compress rotated logs
     )
-
-    # Init Queue used for Slack events
-    SLACK_EVENTS_Q = queue.Queue()
 
     # Connect to Slack
     SLACK_CLIENT = SlackClient(SLACK_BOT_TOKEN)

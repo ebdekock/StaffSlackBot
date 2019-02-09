@@ -1,22 +1,19 @@
 import sqlite3
+from typing import Any, Iterable, List, Optional, Tuple
 
 # Local
-import settings
+import settings as s
 
 # Sqlite3 does not currently support path objects
-database = str(settings.DATABASE_LOCATION)
+database = str(s.DATABASE_LOCATION)
 
 
-def basic_sql_query(sql, data):
+def basic_sql_query(sql: str, data: Iterable) -> None:
     """
     Basic SQL query that connects, commits and closes off
     the connection. It enforces foreign key constraints.
     Supports most of the basic queries that doesnt expect
     a response (INSERT, UPDATE, DELETE).
-
-    :param sql: query to be executed
-    :param data: iterable data to be substituted into query
-
     """
     conn = sqlite3.connect(database)
     cur = conn.cursor()
@@ -26,14 +23,10 @@ def basic_sql_query(sql, data):
     conn.close()
 
 
-def fetch_one_row_sql(sql, data):
+def fetch_one_row_sql(sql: str, data: Iterable) -> Optional[Tuple]:
     """
     SQL query that retrieves a single row
     from database.
-
-    :param sql: query to be executed
-    :param data: iterable data to be substituted into query
-    :returns: a row that matches or None
     """
     conn = sqlite3.connect(database)
     cur = conn.cursor()
@@ -43,7 +36,7 @@ def fetch_one_row_sql(sql, data):
     return row
 
 
-def fetch_all_rows_sql(sql, data=""):
+def fetch_all_rows_sql(sql: str, data: Iterable[Any] = []) -> List[Any]:
     """
     SQL query that retrieves all rows
     from database with optional data
@@ -57,7 +50,7 @@ def fetch_all_rows_sql(sql, data=""):
     return [row for row in (rows or [])]
 
 
-def create_users_table():
+def create_users_table() -> None:
     """
     SQL query that creates user table if it doesnt exist.
     Table order must match order defined on User class.
@@ -80,7 +73,7 @@ def create_users_table():
     conn.close()
 
 
-def create_challenges_table():
+def create_challenges_table() -> None:
     """
     SQL query that creates challenges table if it doesnt exist.
     This will store challenges for the guessing game. Foreign key

@@ -4,6 +4,7 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta
+from typing import Tuple, Union
 
 # Third party
 import schedule
@@ -27,12 +28,14 @@ class SlackEvent:
     user = StringField(upper_case=True)
     message = StringField()
 
-    def __init__(self, user, message):
+    def __init__(self, user: str, message: str) -> None:
         self.user = user
         self.message = message
 
     @staticmethod
-    def parse_direct_mention(message_text):
+    def parse_direct_mention(
+        message_text: str
+    ) -> Union[Tuple[str, str], Tuple[None, None]]:
         """
         Finds a direct mention (@botname that is at the
         beginning) in message text.
@@ -43,7 +46,7 @@ class SlackEvent:
         return (matches.group(1), matches.group(2).strip()) if matches else (None, None)
 
     @staticmethod
-    def is_direct_message(channel):
+    def is_direct_message(channel: str) -> bool:
         """
         See if a message was a direct message (IM/whisper) to our bot.
         """
@@ -52,7 +55,7 @@ class SlackEvent:
         user = fetch_one_row_sql(sql, (channel,))
         return bool(user)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.user!r}, {self.message!r})"
 
 
@@ -62,26 +65,24 @@ class MonitorSlack(threading.Thread):
     (messages from users) and adds it to the Queue.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(MonitorSlack, self).__init__()
         self._stop_event = threading.Event()
 
-    def queue_slack_events(self):
+    def queue_slack_events(self) -> None:
         """
         Parses a list of events coming from the Slack RTM API to find
         bot mentions or whispers.
 
         Add SlackEvent to Events Queue
         If its not a direct mention or whisper to our bot, ignore event
-
-        Params: Slack Events Queue
         """
         slack_events = s.SLACK_CLIENT.rtm_read()
         for event in slack_events:
             if event["type"] == "message" and "subtype" not in event:
                 # Queue event if its a direct mention or direct message
                 user_id, message = SlackEvent.parse_direct_mention(event["text"])
-                if user_id == s.STAFF_BOT_ID:
+                if user_id == s.STAFF_BOT_ID and message:
                     direct_mention = SlackEvent(event["user"], message)
                     s.SLACK_EVENTS_Q.put(direct_mention)
                 elif SlackEvent.is_direct_message(event["channel"]):
@@ -89,7 +90,7 @@ class MonitorSlack(threading.Thread):
                     s.SLACK_EVENTS_Q.put(direct_message)
 
     @logger.catch
-    def run(self):
+    def run(self) -> None:
         while True:
             self.queue_slack_events()
             time.sleep(s.SLACK_RTM_READ_DELAY)
@@ -97,10 +98,10 @@ class MonitorSlack(threading.Thread):
             if self.stopped():
                 break
 
-    def stop(self):
+    def stop(self) -> None:
         self._stop_event.set()
 
-    def stopped(self):
+    def stopped(self) -> bool:
         return self._stop_event.is_set()
 
 
@@ -111,18 +112,23 @@ class ProcessQueue(threading.Thread):
     then process them appropriately.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(ProcessQueue, self).__init__()
         self._stop_event = threading.Event()
 
-    def resolve_challenge(self, event, user):
+    def resolve_challenge(self, event: SlackEvent, user: User) -> None:
         """
         If the user currently has a challenge, we resolve it,
         see if they guessed correctly and inform them accordingly.
         """
         # Get their current challenge
         challenge_user = User.get(slack_id=user.challenge)
-        if event.message.lower() in challenge_user.all_names:
+        if not challenge_user:
+            message = "Something went wrong while resolving your challenge, please try again later!"
+            logger.error(
+                f"{event.user} has broken challenge: {user.challenge}, users not in the DB?"
+            )
+        elif event.message.lower() in challenge_user.all_names:
             message = "Yes! You got it!"
             logger.info(f"{event.user} guessed {user.challenge} correctly.")
         else:
@@ -139,16 +145,23 @@ class ProcessQueue(threading.Thread):
             "chat.postMessage", channel=user.slack_channel, text=message
         )
 
-    def issue_challenge(self, event, user):
+    def issue_challenge(self, event: SlackEvent, user: User) -> None:
         """
         The user does not currently have a challenge, issue
         a new challenge if they request one. We rotate through
-        all users randomly per round.
+        all users once randomly per round.
         """
         # Get their current challenge
         if event.message.startswith(s.PLAY_GAME):
             # We need to issue a new challenge
             all_users = user.get_all_other_users()
+            if not all_users:
+                logger.error(f"There are no other users on the Slack server.")
+                message = "We couldn't detect any other users on your Slack server!"
+                s.SLACK_CLIENT.api_call(
+                    "chat.postMessage", channel=user.slack_channel, text=message
+                )
+                return
             sql = """
                 SELECT
                     challenges.challenge
@@ -162,7 +175,9 @@ class ProcessQueue(threading.Thread):
             # Returns list of tuples, need to convert to list
             current_challenges = [challenge[0] for challenge in current_challenges]
             # Exclude users that have already been guessed this round
-            available_challenges = set(all_users).difference(set(current_challenges))
+            available_challenges: Union[set, list] = set(all_users).difference(
+                set(current_challenges)
+            )
             if not available_challenges:
                 # New round - need to reset challenges
                 sql = "DELETE FROM challenges WHERE slack_id = ?"
@@ -173,19 +188,33 @@ class ProcessQueue(threading.Thread):
             sql = f"INSERT INTO challenges (slack_id, challenge) VALUES(?, ?)"
             data = (user.slack_id, new_challenge)
             basic_sql_query(sql, data)
-            user.challenge = new_challenge
-            user.challenge_datetime = datetime.utcnow()
-            user.save()
 
+            # Get user from DB
             new_challenge_user = User.get(slack_id=new_challenge)
-            # Issue challenge
-            s.SLACK_CLIENT.api_call(
-                "chat.postMessage",
-                channel=user.slack_channel,
-                attachments=[
-                    {"text": "Who is this: ", "image_url": new_challenge_user.photo_url}
-                ],
-            )
+            if new_challenge_user:
+                user.challenge = new_challenge
+                user.challenge_datetime = datetime.utcnow()
+                user.save()
+
+                # Issue challenge
+                s.SLACK_CLIENT.api_call(
+                    "chat.postMessage",
+                    channel=user.slack_channel,
+                    attachments=[
+                        {
+                            "text": "Who is this: ",
+                            "image_url": new_challenge_user.photo_url,
+                        }
+                    ],
+                )
+            else:
+                logger.error(
+                    f"{event.user} has received broken challenge: {user.challenge}"
+                )
+                message = "Something went wrong with issuing your new challenge, please try again later!"
+                s.SLACK_CLIENT.api_call(
+                    "chat.postMessage", channel=user.slack_channel, text=message
+                )
         else:
             # They are not currently in a round, and they gave us a command we dont understand
             default_response = (
@@ -199,7 +228,7 @@ class ProcessQueue(threading.Thread):
             )
 
     @logger.catch
-    def run(self):
+    def run(self) -> None:
         while True:
             # Blocking, will wait for new events to get added
             # Add a graceful timeout so that we can safely kill thread
@@ -211,19 +240,21 @@ class ProcessQueue(threading.Thread):
 
             if event:
                 user = User.get(slack_id=event.user)
-                if user.challenge:
+                if user and user.challenge:
                     self.resolve_challenge(event, user)
-                else:
+                elif user:
                     self.issue_challenge(event, user)
+                else:
+                    logger.error(f"Event for a user that doesn't exist in DB: {event}")
 
             # Check if we need to quit
             if self.stopped():
                 break
 
-    def stop(self):
+    def stop(self) -> None:
         self._stop_event.set()
 
-    def stopped(self):
+    def stopped(self) -> bool:
         return self._stop_event.is_set()
 
 
@@ -233,11 +264,11 @@ class ScheduleThread(threading.Thread):
     clearing stale challenges or periodically updating the users.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(ScheduleThread, self).__init__()
         self._stop_event = threading.Event()
 
-    def clear_challenges(self):
+    def clear_challenges(self) -> None:
         """
         Delete the challenge if user took too long to respond
         """
@@ -261,19 +292,24 @@ class ScheduleThread(threading.Thread):
             if challenge_deadline <= datetime.utcnow():
                 challenge_user = User.get(slack_id=challenge_user)
                 user = User.get(slack_id=user)
-                user.challenge = None
-                user.challenge_datetime = None
-                user.save()
-                response = f"Sorry, you took to long to respond, it is: {challenge_user.first_name}"
-                logger.info(
-                    f"{user.slack_id} took too long to respond, it is: {challenge_user.slack_id}"
-                )
-                s.SLACK_CLIENT.api_call(
-                    "chat.postMessage", channel=user.slack_channel, text=response
-                )
+                if user and challenge_user:
+                    user.challenge = None
+                    user.challenge_datetime = None
+                    user.save()
+                    response = f"Sorry, you took to long to respond, it is: {challenge_user.first_name}"
+                    logger.info(
+                        f"{user.slack_id} took too long to respond, it is: {challenge_user.slack_id}"
+                    )
+                    s.SLACK_CLIENT.api_call(
+                        "chat.postMessage", channel=user.slack_channel, text=response
+                    )
+                else:
+                    logger.error(
+                        f"Can't clear stale challenges, users dont exist in DB"
+                    )
 
     @logger.catch
-    def run(self):
+    def run(self) -> None:
         # Register the scheduled tasks
         schedule.every(5).seconds.do(self.clear_challenges)
         # Update Slack users data every hour
@@ -286,8 +322,8 @@ class ScheduleThread(threading.Thread):
             if self.stopped():
                 break
 
-    def stop(self):
+    def stop(self) -> None:
         self._stop_event.set()
 
-    def stopped(self):
+    def stopped(self) -> bool:
         return self._stop_event.is_set()

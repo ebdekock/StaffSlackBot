@@ -2,6 +2,7 @@ import sys
 
 import settings as s
 from classes import MonitorSlack, ProcessQueue, ScheduleThread
+from sql import create_challenges_table
 from utils import get_users_from_slack
 
 # Requirements
@@ -14,6 +15,8 @@ if __name__ == "__main__":
 
     # On initial connect, get all users from Slack
     get_users_from_slack()
+    # Create table if it doesnt exist
+    create_challenges_table()
 
     # Gets events from Slack
     monitor_slack = MonitorSlack()

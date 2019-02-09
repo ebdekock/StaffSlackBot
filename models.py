@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any, Iterable, List, Optional, Set, Union
 
 from fields import NullDateTimeField, NullEmailField, NullStringField, StringField
 from sql import basic_sql_query, fetch_all_rows_sql, fetch_one_row_sql
@@ -34,7 +35,7 @@ class User:
         "challenge_datetime",
     )
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         # Initialise remaining fields with None, downside is
         # that user has to be created with at least one keyword arg
         for attribute in self.all_attributes:
@@ -47,40 +48,33 @@ class User:
         self.__dict__[key] = value
 
     @property
-    def first_name(self):
+    def first_name(self) -> Optional[str]:
         return self.full_name.split().pop(0).title() if self.full_name else None
 
     @property
-    def all_names(self):
+    def all_names(self) -> Set[str]:
         """
         Return set of names that user could be known as for the guessing
         game.
         """
-        names = set()
+        names: Set = set()
         if self.full_name:
             names.update(self.full_name.split())
         if self.pref_name:
             names.update(self.pref_name.split())
         return names
 
-    def _serialise(self):
+    def _serialise(self) -> List[Any]:
         """
         Convert user into list of its attributes for saving into
         database.
-
-        :returns: a list attributes
-
         """
         return [self[attribute] for attribute in self.all_attributes]
 
     @classmethod
-    def _deserialise(cls, data):
+    def _deserialise(cls, data: Iterable[Any]) -> "User":
         """
         Convert list of user attributes from database into User object.
-
-        :param data: list of User attributes in same order as User fields
-        :returns: a User object
-
         """
         user_data = {}
         for attribute, value in zip(cls.all_attributes, data):
@@ -92,7 +86,7 @@ class User:
             )
         return User(**user_data)
 
-    def _update(self, user):
+    def _update(self, user: "User") -> None:
         """
         Update database fields on User objects, it requires that the user
         already exists in the database.
@@ -110,7 +104,7 @@ class User:
         sql = f"UPDATE users SET {' = ?, '.join(self.all_attributes)} = ? WHERE slack_id = ?"
         basic_sql_query(sql, updated_values)
 
-    def save(self):
+    def save(self) -> None:
         """
         Save user to the database. If they already exist, we will update
         the values that have changed.
@@ -124,7 +118,7 @@ class User:
             sql = f"INSERT INTO users {self.all_attributes} VALUES(?{', ?' * number_of_attributes})"
             basic_sql_query(sql, self._serialise())
 
-    def delete(self):
+    def delete(self) -> None:
         """
         Delete user from the database if it exists.
         """
@@ -134,17 +128,10 @@ class User:
             basic_sql_query(sql, (user.slack_id,))
 
     @staticmethod
-    def get(slack_id=None, email=None):
+    def get(slack_id: str = None, email: str = None) -> Union["User", None]:
         """
         Retrieve user from database if they exist
-
-        :param slack_id: users slack id (Default value = None)
-        :type slack_id: str
-        :param email: users email address (Default value = None)
-        :type email: str
-        :returns: a User object or None
         """
-
         # We can search via slack_id or email as they are both
         # unique fields
         search_param = slack_id if slack_id else email
@@ -158,7 +145,7 @@ class User:
 
         return User._deserialise(user) if user else None
 
-    def get_all_other_users(self):
+    def get_all_other_users(self) -> List[Any]:
         """
         Retrieve all other users that exist in the database.
         """
@@ -167,16 +154,16 @@ class User:
         return [user[0] for user in users]
 
     @staticmethod
-    def parse_slack_data(data):
+    def parse_slack_data(data: dict) -> Optional["User"]:
         """
         Parse data from Slack API into User object
         See https://api.slack.com/types/user
-
-        :param data: a dictionary from slack api with fields as per above
-        :returns: a User object
         """
         profile = data.get("profile")
-        user = User(slack_id=data.get("id"))
+        user_id = data.get("id")
+        if not user_id or not profile:
+            return None
+        user = User(slack_id=user_id)
         user.email = profile.get("email")
         # Set this to None string if it doesnt exist
         user.full_name = profile.get("real_name_normalized", "None")
@@ -189,5 +176,5 @@ class User:
 
         return user
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.slack_id!r}, {self.full_name!r})"

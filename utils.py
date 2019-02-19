@@ -89,15 +89,15 @@ def get_slack_users_channels() -> Dict[str, str]:
 def is_active_slack_user(user: Dict) -> bool:
     """
     Returns true for non-bot and active users.
-    Also ensures the user is using company email
-    if filtering enabled.
+    Only returns true for users with email
+    addresses, if you dont have an email
+    its assumed you are bot.
 
     See https://api.slack.com/types/user
     """
     if not user.get("deleted") and not user.get("is_bot"):
         profile = user.get("profile")
         if profile:
-            email = profile.get("email")
-            if email and s.COMPANY_SLACK_EMAIL in email:
+            if profile.get("email"):
                 return True
     return False

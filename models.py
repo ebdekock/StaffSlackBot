@@ -1,3 +1,5 @@
+from urllib.parse import unquote_plus
+
 from datetime import datetime
 from typing import Any, Iterable, List, Optional, Set, Union
 
@@ -169,7 +171,9 @@ class User:
         user.full_name = profile.get("real_name_normalized", "None")
         user.pref_name = profile.get("display_name_normalized")
         user.phone = profile.get("phone")
-        user.photo_url = profile.get("image_192")
+        profile_image = profile.get("image_192")
+        encoded_profile_image = profile_image.split("&d=")[-1]
+        user.photo_url = unquote_plus(encoded_profile_image)
         # New or updated user, dont modify challenges
         user.challenge = None
         user.challenge_datetime = None

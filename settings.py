@@ -27,18 +27,14 @@ SLACK_CLIENT: Any = None
 STAFF_BOT_ID: Optional[str] = None
 
 # Delay in seconds between checking Slack real time session for new events
-SLACK_RTM_READ_DELAY = 0.5
+# Use a lower value for larger servers or if you experience delays in responses.
+SLACK_RTM_READ_DELAY = 0.05
 # Queue get is blocking, we want a time in seconds out if we need to bail. Useful for
 # safe shutdown of bot.
 QUEUE_TIMEOUT = 5
 # How long in seconds do users have to guess challenge before it times out. Will be
 # a range that has additional 10 seconds on top of this time.
 CHALLENGE_TIMEOUT = 30
-
-# Filter active users by specific company email address.
-# Useful if you have third party consultants that you want
-# to exclude. Set to @ for all users in your Slack Channel.
-COMPANY_SLACK_EMAIL = "@"
 
 # Command used to start a new guessing game
 PLAY_GAME = "play"

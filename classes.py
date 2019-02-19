@@ -79,7 +79,7 @@ class MonitorSlack(threading.Thread):
         """
         slack_events = s.SLACK_CLIENT.rtm_read()
         for event in slack_events:
-            if event["type"] == "message" and "subtype" not in event:
+            if event.get("type") == "message" and "subtype" not in event:
                 # Queue event if its a direct mention or direct message
                 user_id, message = SlackEvent.parse_direct_mention(event["text"])
                 if user_id == s.STAFF_BOT_ID and message:
@@ -141,9 +141,7 @@ class ProcessQueue(threading.Thread):
         user.challenge = None
         user.challenge_datetime = None
         user.save()
-        s.SLACK_CLIENT.api_call(
-            "chat.postMessage", channel=user.slack_channel, text=message
-        )
+        s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
 
     def issue_challenge(self, event: SlackEvent, user: User) -> None:
         """
@@ -158,9 +156,7 @@ class ProcessQueue(threading.Thread):
             if not all_users:
                 logger.error(f"There are no other users on the Slack server.")
                 message = "We couldn't detect any other users on your Slack server!"
-                s.SLACK_CLIENT.api_call(
-                    "chat.postMessage", channel=user.slack_channel, text=message
-                )
+                s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
                 return
             sql = """
                 SELECT
@@ -196,36 +192,22 @@ class ProcessQueue(threading.Thread):
                 user.challenge_datetime = datetime.utcnow()
                 user.save()
 
-                # Issue challenge
-                s.SLACK_CLIENT.api_call(
-                    "chat.postMessage",
-                    channel=user.slack_channel,
-                    attachments=[
-                        {
-                            "text": "Who is this: ",
-                            "image_url": new_challenge_user.photo_url,
-                        }
-                    ],
-                )
+                message = f"Who is this:\n {new_challenge_user.photo_url}"
+                s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
             else:
                 logger.error(
                     f"{event.user} has received broken challenge: {user.challenge}"
                 )
                 message = "Something went wrong with issuing your new challenge, please try again later!"
-                s.SLACK_CLIENT.api_call(
-                    "chat.postMessage", channel=user.slack_channel, text=message
-                )
+                s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
+
         else:
             # They are not currently in a round, and they gave us a command we dont understand
-            default_response = (
-                f"I'm not sure what you mean, please try *{s.PLAY_GAME}*."
-            )
+            message = f"I'm not sure what you mean, please try *{s.PLAY_GAME}*."
             logger.info(
                 f"{user.slack_id} does not know what they are doing: {event.message}"
             )
-            s.SLACK_CLIENT.api_call(
-                "chat.postMessage", channel=user.slack_channel, text=default_response
-            )
+            s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
 
     @logger.catch
     def run(self) -> None:
@@ -296,13 +278,12 @@ class ScheduleThread(threading.Thread):
                     user.challenge = None
                     user.challenge_datetime = None
                     user.save()
-                    response = f"Sorry, you took to long to respond, it is: {challenge_user.first_name}"
+                    message = f"Sorry, you took to long to respond, it is: {challenge_user.first_name}"
                     logger.info(
                         f"{user.slack_id} took too long to respond, it is: {challenge_user.slack_id}"
                     )
-                    s.SLACK_CLIENT.api_call(
-                        "chat.postMessage", channel=user.slack_channel, text=response
-                    )
+                    s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
+
                 else:
                     logger.error(
                         f"Can't clear stale challenges, users dont exist in DB"

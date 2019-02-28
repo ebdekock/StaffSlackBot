@@ -1,7 +1,10 @@
 from typing import Dict, List
 
 # Third party
+import cv2
+import requests
 from loguru import logger
+import numpy as np
 
 # Local
 import settings as s
@@ -46,10 +49,16 @@ def get_users_from_slack() -> None:
     for user in users:
         current_user = User.parse_slack_data(user)
         if current_user and is_active_slack_user(user):
+            # Get their Slack channel
             current_user.slack_channel = channels.get(current_user.slack_id)
             current_user.save()
         elif current_user:
+            # Remove user from DB if they aren't active
             current_user.delete()
+
+    # Update all users profiles if they have a face in their avatar
+    if s.ENABLE_FACE_DETECTION:
+        detect_face(User.get_all_users())
 
     logger.info(f"Successfully updated users from Slack.")
 
@@ -86,6 +95,7 @@ def get_slack_users_channels() -> Dict[str, str]:
     return channels
 
 
+@logger.catch
 def is_active_slack_user(user: Dict) -> bool:
     """
     Returns true for non-bot and active users.
@@ -101,3 +111,45 @@ def is_active_slack_user(user: Dict) -> bool:
             if profile.get("email"):
                 return True
     return False
+
+
+@logger.catch
+def detect_face(users: List) -> None:
+    """
+    Uses two Haar Classifiers to try and determine if there is a face
+    present in the users Slack avatar - if face detection is enabled. Its
+    not super accurate and its mostly to get rid of the stock image from
+    Slack and super obvious pictures that won't be able to help users determine
+    who it is.
+    """
+    # We use two classifiers to try and determine if there is a face present
+    cascades = [
+        cv2.CascadeClassifier(
+            f"{cv2.data.haarcascades}haarcascade_frontalface_default.xml"
+        ),
+        cv2.CascadeClassifier(f"{cv2.data.haarcascades}haarcascade_profileface.xml"),
+    ]
+    # Go through all users and ensure they are valid for the guessing game
+    for user in users:
+        can_play_game = False
+        for cascade in cascades:
+            if can_play_game:
+                # Don't need to look further
+                break
+            # Retrieve image
+            r = requests.get(user.photo_url)
+            r.raise_for_status()
+            # Convert to numpy array so that we can decode it
+            image = np.asarray(bytearray(r.content), dtype="uint8")
+            image = cv2.imdecode(image, cv2.IMREAD_COLOR)
+            # Convert to grey scale for cv2 recognition
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # Detect faces in the image
+            faces_found = cascade.detectMultiScale(
+                gray, scaleFactor=1.05, minNeighbors=5, minSize=(30, 30)
+            )
+            if len(faces_found) > 0:
+                can_play_game = True
+        # Save to DB
+        user.can_play_game = can_play_game
+        user.save()

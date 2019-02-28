@@ -38,6 +38,7 @@ CHALLENGE_TIMEOUT = 30
 
 # Command used to start a new guessing game
 PLAY_GAME = "play"
+ENABLE_FACE_DETECTION = True
 
 
 def slack_init() -> None:

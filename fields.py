@@ -2,6 +2,29 @@ import re
 from datetime import datetime
 
 
+class BoolField:
+    """Bool field, sets default to None if not specified."""
+
+    def __init__(self, default=None):
+        if type(default) != bool and default is not None:
+            raise ValueError(f"BoolField default must be boolean <{type(default)}>")
+        self.default = default
+
+    def __get__(self, instance, owner):
+        return instance.__dict__[self.name]
+
+    def __set__(self, instance, value):
+        if type(value) != bool and value is not None:
+            raise ValueError(f"Field must be bool <{self.name}: {value}>")
+        if value is not None:
+            instance.__dict__[self.name] = value
+        else:
+            instance.__dict__[self.name] = self.default
+
+    def __set_name__(self, owner, name):
+        self.name = name
+
+
 class NullEmailField:
     """Email stored as string that can be null. Always lower case."""
 

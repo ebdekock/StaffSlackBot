@@ -1,5 +1,4 @@
 import queue
-import random
 import re
 import threading
 import time
@@ -14,7 +13,7 @@ from loguru import logger
 import settings as s
 from fields import StringField
 from models import User
-from sql import basic_sql_query, fetch_all_rows_sql, fetch_one_row_sql
+from sql import fetch_all_rows_sql, fetch_one_row_sql
 from utils import get_users_from_slack
 
 
@@ -149,49 +148,21 @@ class ProcessQueue(threading.Thread):
         a new challenge if they request one. We rotate through
         all users once randomly per round.
         """
-        # Get their current challenge
+        # See if they want to play the guessing game
         if event.message.startswith(s.PLAY_GAME):
-            # We need to issue a new challenge
-            all_users = user.get_all_other_users()
+            all_users = user.get_all_valid_users()
             if not all_users:
-                logger.error(f"There are no other users on the Slack server.")
-                message = "We couldn't detect any other users on your Slack server!"
+                logger.error(f"There are no valid users on the Slack server.")
+                message = "We couldn't detect any valid users on your Slack server, make sure they have profile pictures!"
                 s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
                 return
-            sql = """
-                SELECT
-                    challenges.challenge
-                FROM
-                    challenges
-                INNER JOIN users ON users.slack_id = challenges.slack_id
-                WHERE
-                    users.slack_id = ?;
-                """
-            current_challenges = fetch_all_rows_sql(sql, (user.slack_id,))
-            # Returns list of tuples, need to convert to list
-            current_challenges = [challenge[0] for challenge in current_challenges]
-            # Exclude users that have already been guessed this round
-            available_challenges: Union[set, list] = set(all_users).difference(
-                set(current_challenges)
-            )
-            if not available_challenges:
-                # New round - need to reset challenges
-                sql = "DELETE FROM challenges WHERE slack_id = ?"
-                basic_sql_query(sql, (user.slack_id,))
-                available_challenges = all_users[:]
-            new_challenge = random.sample(available_challenges, 1).pop()
-            # Save new challenge
-            sql = f"INSERT INTO challenges (slack_id, challenge) VALUES(?, ?)"
-            data = (user.slack_id, new_challenge)
-            basic_sql_query(sql, data)
-
+            new_challenge = user.get_next_challenge()
             # Get user from DB
             new_challenge_user = User.get(slack_id=new_challenge)
             if new_challenge_user:
                 user.challenge = new_challenge
                 user.challenge_datetime = datetime.utcnow()
                 user.save()
-
                 message = f"Who is this:\n {new_challenge_user.photo_url}"
                 s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
             else:
@@ -200,9 +171,8 @@ class ProcessQueue(threading.Thread):
                 )
                 message = "Something went wrong with issuing your new challenge, please try again later!"
                 s.SLACK_CLIENT.rtm_send_message(user.slack_channel, message)
-
+        # They are not currently in a round, and they gave us a command we dont understand
         else:
-            # They are not currently in a round, and they gave us a command we dont understand
             message = f"I'm not sure what you mean, please try *{s.PLAY_GAME}*."
             logger.info(
                 f"{user.slack_id} does not know what they are doing: {event.message}"
@@ -269,7 +239,6 @@ class ScheduleThread(threading.Thread):
             challenge_user = challenge[1]
             challenge_time = datetime.strptime(challenge[2], "%Y-%m-%d %H:%M:%S.%f")
             challenge_deadline = challenge_time + timedelta(seconds=s.CHALLENGE_TIMEOUT)
-            # TODO lock and move slack messages to a queue/async system so that we dont block here
             # This challenge is overdue, we must remove it
             if challenge_deadline <= datetime.utcnow():
                 challenge_user = User.get(slack_id=challenge_user)

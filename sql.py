@@ -64,7 +64,8 @@ def create_users_table() -> None:
         phone text,
         photo_url text,
         challenge text,
-        challenge_datetime timestamp
+        challenge_datetime timestamp,
+        can_play_game boolean
     );"""
     conn = sqlite3.connect(database)
     cur = conn.cursor()

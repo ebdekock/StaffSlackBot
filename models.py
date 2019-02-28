@@ -1,9 +1,16 @@
-from urllib.parse import unquote_plus
-
+import random
 from datetime import datetime
 from typing import Any, Iterable, List, Optional, Set, Union
+from urllib.parse import unquote_plus
 
-from fields import NullDateTimeField, NullEmailField, NullStringField, StringField
+# Local
+from fields import (
+    NullDateTimeField,
+    NullEmailField,
+    NullStringField,
+    StringField,
+    BoolField,
+)
 from sql import basic_sql_query, fetch_all_rows_sql, fetch_one_row_sql
 
 
@@ -24,6 +31,8 @@ class User:
     challenge = NullStringField(upper_case=True)
     # UTC time
     challenge_datetime = NullDateTimeField()
+    # Defaults to true in case face detection is disabled
+    can_play_game = BoolField(default=True)
 
     all_attributes = (
         "slack_id",
@@ -35,6 +44,7 @@ class User:
         "photo_url",
         "challenge",
         "challenge_datetime",
+        "can_play_game",
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -86,6 +96,10 @@ class User:
             user_data["challenge_datetime"] = datetime.strptime(
                 user_data["challenge_datetime"], "%Y-%m-%d %H:%M:%S.%f"
             )
+        if user_data["can_play_game"] == 1:
+            user_data["can_play_game"] = True
+        else:
+            user_data["can_play_game"] = False
         return User(**user_data)
 
     def _update(self, user: "User") -> None:
@@ -147,13 +161,58 @@ class User:
 
         return User._deserialise(user) if user else None
 
-    def get_all_other_users(self) -> List[Any]:
+    @classmethod
+    def get_all_users(cls) -> List[Any]:
         """
-        Retrieve all other users that exist in the database.
+        Retrieve all users that exist in the database.
         """
-        sql = f"SELECT slack_id FROM users WHERE slack_id NOT LIKE '{self.slack_id}'"
+        sql = "SELECT * FROM users"
+        users = fetch_all_rows_sql(sql)
+        return [cls._deserialise(user) for user in users]
+
+    def get_all_valid_users(self) -> List[Any]:
+        """
+        Retrieve all other users that exist in the database,
+        that are valid for the guessing game. Excludes self.
+        """
+        sql = f"SELECT slack_id FROM users WHERE slack_id NOT LIKE '{self.slack_id}' AND can_play_game = 1"
         users = fetch_all_rows_sql(sql)
         return [user[0] for user in users]
+
+    def get_next_challenge(self) -> str:
+        """
+        Get the users next random challenge.
+        If they have gone through all users, then clear
+        their challenges and start a new round.
+        """
+        all_users = self.get_all_valid_users()
+        sql = """
+            SELECT
+                challenges.challenge
+            FROM
+                challenges
+            INNER JOIN users ON users.slack_id = challenges.slack_id
+            WHERE
+                users.slack_id = ?;
+            """
+        current_challenges = fetch_all_rows_sql(sql, (self.slack_id,))
+        # Returns list of tuples, need to convert to list
+        current_challenges = [challenge[0] for challenge in current_challenges]
+        # Exclude users that have already been guessed this round
+        available_challenges: Union[set, list] = set(all_users).difference(
+            set(current_challenges)
+        )
+        if not available_challenges:
+            # New round - need to reset challenges
+            sql = "DELETE FROM challenges WHERE slack_id = ?"
+            basic_sql_query(sql, (self.slack_id,))
+            available_challenges = all_users[:]
+        new_challenge = random.sample(available_challenges, 1).pop()
+        # Save new challenge
+        sql = f"INSERT INTO challenges (slack_id, challenge) VALUES(?, ?)"
+        data = (self.slack_id, new_challenge)
+        basic_sql_query(sql, data)
+        return new_challenge
 
     @staticmethod
     def parse_slack_data(data: dict) -> Optional["User"]:

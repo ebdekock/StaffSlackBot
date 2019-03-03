@@ -20,6 +20,7 @@ Guessing game uses optional face recognition to filter out avatars that won't of
 
 # Requirements
 - Python (>= 3.6)
+- [Poetry](https://github.com/sdispater/poetry)
 - OpenCV (should be installed by poetry, but if it fails due to ARM based platform, see [here](https://docs.opencv.org/4.0.1/df/d65/tutorial_table_of_content_introduction.html))
 
 
@@ -29,5 +30,6 @@ Guessing game uses optional face recognition to filter out avatars that won't of
 - Take note of `Bot User OAuth Access Token` from `OAuth & Permissions`
 - Clone repo
 - Add this token to an .env file: `SLACK_BOT_OAUTH_ACCESS_TOKEN='SECRET'`
+- Install dependencies `poetry install`
 - Run bot `python staff_bot.py`
 - Use something like systemd to run this script permanently

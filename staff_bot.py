@@ -7,7 +7,7 @@ from utils import get_users_from_slack
 
 # Requirements
 assert sys.version_info[0] >= 3, "Require Python 3"
-assert s.SLACK_BOT_TOKEN, "Missing Secret: SLACK_BOT_TOKEN"
+assert s.SLACK_BOT_OAUTH_ACCESS_TOKEN, "Missing Secret: SLACK_BOT_OAUTH_ACCESS_TOKEN"
 
 if __name__ == "__main__":
     # Connect to Slack

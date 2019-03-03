@@ -17,6 +17,7 @@ scikit-image = "^0.14.2"
 matplotlib = "^3.0"
 scikit-learn = "^0.20.2"
 opencv-python-headless = "^4.0"
+python-dotenv = "^0.10.1"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.660.0"

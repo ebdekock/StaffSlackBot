@@ -6,19 +6,21 @@ import queue
 from pathlib import Path
 
 # Third Party
+from dotenv import load_dotenv
 from loguru import logger
 from slackclient import SlackClient
 
 from typing import Any, Optional
+
+# Get secrets from local .env file.
+load_dotenv()
 
 # File locations
 LOG_LOCATION: Path = Path.cwd() / "log" / "bot.log"
 DATABASE_LOCATION: Path = Path.cwd() / "data" / "bot.sqlite"
 
 # Used to connect to Slack API
-SLACK_BOT_TOKEN: Optional[str] = os.getenv("SLACK_BOT_TOKEN")
-# Needed for interactive messages
-SLACK_SIGNING_SECRET: Optional[str] = os.getenv("SLACK_SIGNING_SECRET")
+SLACK_BOT_OAUTH_ACCESS_TOKEN: Optional[str] = os.getenv("SLACK_BOT_OAUTH_ACCESS_TOKEN")
 # Init Slack events queue
 SLACK_EVENTS_Q: queue.Queue = queue.Queue()
 
@@ -46,7 +48,7 @@ def slack_init() -> None:
     Initialise Slack connection and configure global vars.
     Should be run once when the bot starts up.
     """
-    global SLACK_BOT_TOKEN
+    global SLACK_BOT_OAUTH_ACCESS_TOKEN
     global SLACK_CLIENT
     global STAFF_BOT_ID
     global LOG_LOCATION
@@ -64,7 +66,7 @@ def slack_init() -> None:
     )
 
     # Connect to Slack
-    SLACK_CLIENT = SlackClient(SLACK_BOT_TOKEN)
+    SLACK_CLIENT = SlackClient(SLACK_BOT_OAUTH_ACCESS_TOKEN)
     assert SLACK_CLIENT.rtm_connect(
         with_team_state=False
     ), "Can't start real time Slack session"
